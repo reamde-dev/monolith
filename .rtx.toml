@@ -1,0 +1,4 @@
+[tools]
+buf = "latest"
+protoc-gen-go = "latest"
+protoc-gen-go-grpc = "latest"
