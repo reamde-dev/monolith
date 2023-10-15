@@ -1,9 +1,11 @@
 package rpc
 
 import (
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"sync"
 )
 
 type (
@@ -18,26 +20,60 @@ type (
 )
 
 type Client struct {
-	ServerAddress string
+	sync.Mutex
+	conns map[string]net.Conn
 }
 
-func (c *Client) SendRequest(request Request) (Response, error) {
-	conn, err := net.Dial("tcp", c.ServerAddress)
-	if err != nil {
-		return Response{}, err
-	}
-	defer conn.Close()
+func (c *Client) getConnection(serverAddress string) (net.Conn, error) {
+	c.Lock()
+	defer c.Unlock()
 
-	encoder := gob.NewEncoder(conn)
-	decoder := gob.NewDecoder(conn)
+	if c.conns == nil {
+		c.conns = make(map[string]net.Conn)
+	}
+
+	// If the connection doesn't exist or is closed, create a new one
+	if conn, ok := c.conns[serverAddress]; ok && conn != nil {
+		return conn, nil
+	}
+
+	conn, err := net.Dial("tcp", serverAddress)
+	if err != nil {
+		return nil, err
+	}
+	c.conns[serverAddress] = conn
+
+	return conn, nil
+}
+
+func (c *Client) closeConnection(serverAddress string) {
+	c.Lock()
+	defer c.Unlock()
+
+	if conn, ok := c.conns[serverAddress]; ok && conn != nil {
+		conn.Close()
+		delete(c.conns, serverAddress)
+	}
+}
+
+func (c *Client) SendRequest(serverAddress string, request Request) (Response, error) {
+	conn, err := c.getConnection(serverAddress)
+	if err != nil {
+		return Response{}, fmt.Errorf("error getting connection: %w", err)
+	}
+
+	encoder := json.NewEncoder(conn)
+	decoder := json.NewDecoder(conn)
 
 	if err := encoder.Encode(&request); err != nil {
-		return Response{}, err
+		c.closeConnection(serverAddress) // Close connection in case of error
+		return Response{}, fmt.Errorf("error encoding request: %w", err)
 	}
 
 	var response Response
 	if err := decoder.Decode(&response); err != nil {
-		return Response{}, err
+		c.closeConnection(serverAddress) // Close connection in case of error
+		return Response{}, fmt.Errorf("error decoding response: %w", err)
 	}
 
 	return response, nil
@@ -49,21 +85,26 @@ type Server struct {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	encoder := json.NewEncoder(conn)
+	decoder := json.NewDecoder(conn)
 
-	decoder := gob.NewDecoder(conn)
-	encoder := gob.NewEncoder(conn)
+	for {
+		var request Request
+		if err := decoder.Decode(&request); err != nil {
+			if err != io.EOF {
+				fmt.Println("Error decoding:", err)
+			}
+			break // exit the loop if there's a decoding error or client closed the connection
+		}
 
-	var request Request
-	if err := decoder.Decode(&request); err != nil {
-		fmt.Println("Error decoding:", err)
-		return
+		response := s.Handler(request)
+		if err := encoder.Encode(&response); err != nil {
+			fmt.Println("Error encoding:", err)
+			break // exit the loop if there's an encoding error
+		}
 	}
 
-	response := s.Handler(request)
-	if err := encoder.Encode(&response); err != nil {
-		fmt.Println("Error encoding:", err)
-	}
+	conn.Close()
 }
 
 func (s *Server) Listen() {
