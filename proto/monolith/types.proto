@@ -65,15 +65,11 @@ message BrokerInfo {
     Identity id = 1;
     repeated PeerInfo peers = 2;
 }
-
-message ProviderServiceInfo {
-    string topic = 1;
-}
-
+ 
 message ProviderInfo {
     Identity id = 1;
     PeerInfo peer = 2;
-    repeated ProviderServiceInfo services = 3;
+    repeated string topics = 3;
 }
 
 message AccountInfo {
