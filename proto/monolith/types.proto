@@ -76,7 +76,7 @@ message ProviderInfo {
     repeated ProviderServiceInfo services = 3;
 }
 
-message ClientInfo {
+message AccountInfo {
     Identity id = 1;
     PeerInfo peer = 2;
     repeated BrokerInfo brokers = 3;
