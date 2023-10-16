@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package monolith;
+
+option go_package = "reamde.dev/monolith/proto;monolith";
+
+enum KeyType {
+    KEYTYPE_UNSPECIFIED = 0;
+    KEYTYPE_OKP = 1; // Octet Key Pair
+}
+
+enum KeyUse {
+    USE_UNSPECIFIED = 0;
+    USE_ENC = 1; // Encryption
+    USE_SIG = 2; // Signature
+}
+
+enum Algorithm {
+    ALG_UNSPECIFIED = 0;
+    ALG_EDDSA = 1; // EdDSA algorithm
+}
+
+enum Curve {
+    CRV_UNSPECIFIED = 0;
+    CRV_ED25519 = 1; // Ed25519 curve
+}
+
+message PublicKey {
+    KeyType kty = 1;   // Key Type; for Ed25519 this will likely be KEYTYPE_OKP
+    KeyUse use = 2;   // Use (either USE_ENC or USE_SIG)
+    string kid = 3;   // Key ID
+    Algorithm alg = 4;   // Algorithm intended for use; for Ed25519 this will be ALG_EDDSA
+    Curve crv = 5;   // Curve name; for Ed25519 this will always be CRV_ED25519
+
+    bytes x = 6;      // Public key for Ed25519
+}
+
+message PrivateKey {
+    KeyType kty = 1;   // Key Type; for Ed25519 this will likely be KEYTYPE_OKP
+    KeyUse use = 2;   // Use (either USE_ENC or USE_SIG)
+    string kid = 3;   // Key ID
+    Algorithm alg = 4;   // Algorithm intended for use; for Ed25519 this will be ALG_EDDSA
+    Curve crv = 5;   // Curve name; for Ed25519 this will always be CRV_ED25519
+
+    bytes d = 6;      // Private key for Ed25519
+}
+
+message Identity {
+    uint32 version = 1;
+    string hash = 2;
+}
+
+message Address {
+    string transport = 1;
+    string address = 2;
+    uint32 port = 3;
+}
+
+message PeerInfo {
+    repeated Address addresses = 1;
+    PublicKey public_key = 2;
+}
+
+message BrokerInfo {
+    Identity id = 1;
+    repeated PeerInfo peers = 2;
+}
+
+message ProviderServiceInfo {
+    string topic = 1;
+}
+
+message ProviderInfo {
+    Identity id = 1;
+    PeerInfo peer = 2;
+    repeated ProviderServiceInfo services = 3;
+}
+
+message ClientInfo {
+    Identity id = 1;
+    PeerInfo peer = 2;
+    repeated BrokerInfo brokers = 3;
+    repeated ProviderInfo providers = 4;
+}
