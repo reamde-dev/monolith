@@ -31,6 +31,7 @@ type pendingRequest struct {
 
 type pendingWrite struct {
 	seq  uint64
+	path string
 	buf  []byte
 	wait bool
 	err  error
@@ -39,6 +40,7 @@ type pendingWrite struct {
 
 type pendingRead struct {
 	seq  uint64
+	path string
 	body []byte
 }
 
@@ -87,7 +89,7 @@ func (c *RPC) handle(sess *Session) {
 	}()
 }
 
-func (c *RPC) Request(ctx context.Context, payload []byte) ([]byte, error) {
+func (c *RPC) Request(ctx context.Context, path string, payload []byte) ([]byte, error) {
 	pr := &pendingRequest{
 		done: make(chan struct{}),
 	}
@@ -95,7 +97,7 @@ func (c *RPC) Request(ctx context.Context, payload []byte) ([]byte, error) {
 	requestSeq := c.next()
 	c.requests.Store(requestSeq, pr)
 
-	err := c.write(requestSeq, payload, false)
+	err := c.write(requestSeq, path, payload, false)
 	if err != nil {
 		close(pr.done)
 		c.requests.Delete(requestSeq)
@@ -115,9 +117,10 @@ func (c *RPC) next() uint64 {
 	return atomic.AddUint64(&c.requestSeq, 1)
 }
 
-func (c *RPC) write(seq uint64, payload []byte, wait bool) error {
+func (c *RPC) write(seq uint64, path string, payload []byte, wait bool) error {
 	pw := &pendingWrite{
 		seq:  seq,
+		path: path,
 		buf:  payload,
 		wait: wait,
 		done: make(chan struct{}),
@@ -150,10 +153,13 @@ func (c *RPC) writeLoop(conn *Session) error {
 		}
 
 		// TODO: probably too expensive
-		header := []byte{}
-		header = binary.AppendUvarint(header, pw.seq)
-		header = binary.AppendUvarint(header, uint64(len(pw.buf)))
-		_, err = conn.write(append(header, pw.buf...))
+		body := []byte{}
+		body = binary.AppendUvarint(body, pw.seq)
+		body = binary.AppendUvarint(body, uint64(len(pw.path)))
+		body = append(body, pw.path...)
+		body = binary.AppendUvarint(body, uint64(len(pw.buf)))
+		body = append(body, pw.buf...)
+		_, err = conn.write(body)
 		if pw.wait {
 			pw.err = err
 			close(pw.done)
@@ -162,6 +168,38 @@ func (c *RPC) writeLoop(conn *Session) error {
 			return fmt.Errorf("write error: %w", err)
 		}
 	}
+}
+
+func (c *RPC) readNextUInt(r *bytes.Reader) (uint64, error) {
+	seq, err := binary.ReadUvarint(r)
+	if err != nil {
+		return 0, fmt.Errorf("read seq error: %w", err)
+	}
+
+	return seq, nil
+}
+
+func (c *RPC) readNextBytes(r *bytes.Reader) ([]byte, error) {
+	size, err := binary.ReadUvarint(r)
+	if err != nil {
+		return nil, fmt.Errorf("read size error: %w", err)
+	}
+
+	if size == 0 {
+		return nil, nil
+	}
+
+	data := make([]byte, size)
+	n, err := io.ReadFull(r, data)
+	if err != nil {
+		return nil, fmt.Errorf("read data error: %w", err)
+	}
+
+	if n != len(data) {
+		return nil, fmt.Errorf("read data error: %w", io.ErrUnexpectedEOF)
+	}
+
+	return data, nil
 }
 
 func (c *RPC) readLoop(conn *Session) error {
@@ -173,24 +211,19 @@ func (c *RPC) readLoop(conn *Session) error {
 
 		reader := bytes.NewReader(message)
 
-		seq, err := binary.ReadUvarint(reader)
+		seq, err := c.readNextUInt(reader)
 		if err != nil {
 			return fmt.Errorf("read seq error: %w", err)
 		}
 
-		size, err := binary.ReadUvarint(reader)
+		path, err := c.readNextBytes(reader)
 		if err != nil {
-			return fmt.Errorf("read size error: %w", err)
+			return fmt.Errorf("read path error: %w", err)
 		}
 
-		data := make([]byte, size)
-		n, err := io.ReadFull(reader, data)
+		data, err := c.readNextBytes(reader)
 		if err != nil {
 			return fmt.Errorf("read data error: %w", err)
-		}
-
-		if n != len(data) {
-			return fmt.Errorf("read data error: %w", io.ErrUnexpectedEOF)
 		}
 
 		pr, exists := c.requests.Load(seq)
@@ -201,6 +234,7 @@ func (c *RPC) readLoop(conn *Session) error {
 		if seq == 0 || !exists {
 			err := c.readerQueue.Push(&pendingRead{
 				seq:  seq,
+				path: string(path),
 				body: data,
 			})
 			if err != nil {
@@ -217,19 +251,19 @@ func (c *RPC) readLoop(conn *Session) error {
 	}
 }
 
-func (c *RPC) Read() (body []byte, callback func([]byte) error, err error) {
+func (c *RPC) Read() (path string, body []byte, callback func([]byte) error, err error) {
 	pr, err := c.readerQueue.Pop()
 	if err != nil {
 		if errors.Is(err, xsync.ErrQueueClosed) {
-			return nil, nil, fmt.Errorf("reader queue closed: %w", io.EOF)
+			return "", nil, nil, fmt.Errorf("reader queue closed: %w", io.EOF)
 		}
-		return nil, nil, fmt.Errorf("reader queue error: %w", err)
+		return "", nil, nil, fmt.Errorf("reader queue error: %w", err)
 	}
-	return pr.body, func(payload []byte) error {
+	return pr.path, pr.body, func(payload []byte) error {
 		if pr.seq == 0 {
 			return fmt.Errorf("not a request")
 		}
-		return c.write(pr.seq, payload, true)
+		return c.write(pr.seq, path, payload, true)
 	}, nil
 }
 

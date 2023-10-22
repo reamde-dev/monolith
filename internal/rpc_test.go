@@ -18,9 +18,10 @@ func TestRPC_E2E(t *testing.T) {
 
 	// add a handler for the "server"
 	go func() {
-		msg, cb, err := srv.Read()
+		path, msg, cb, err := srv.Read()
 		require.NoError(t, err)
-		require.Equal(t, "ping", string(msg))
+		require.Equal(t, "ping", path)
+		require.Equal(t, "PING!", string(msg))
 
 		err = cb([]byte("pong"))
 		require.NoError(t, err)
@@ -30,7 +31,7 @@ func TestRPC_E2E(t *testing.T) {
 	cln := NewRPC(mc.Client)
 
 	// client writes to server
-	res, err := cln.Request(context.Background(), []byte("ping"))
+	res, err := cln.Request(context.Background(), "ping", []byte("PING!"))
 	require.NoError(t, err)
 	require.Equal(t, "pong", string(res))
 
@@ -40,11 +41,11 @@ func TestRPC_E2E(t *testing.T) {
 		cln.Close()
 
 		// client writes to server errors
-		_, err := cln.Request(context.Background(), []byte("ping"))
+		_, err := cln.Request(context.Background(), "ping", []byte("PING!"))
 		require.ErrorIs(t, err, io.EOF)
 
 		// server writes to client errors
-		_, err = srv.Request(context.Background(), []byte("ping"))
+		_, err = srv.Request(context.Background(), "ping", []byte("PING!"))
 		require.ErrorIs(t, err, io.EOF)
 	})
 }
@@ -64,9 +65,10 @@ func TestRPC_E2E_LongMessage(t *testing.T) {
 
 	// add a handler for the "server"
 	go func() {
-		msg, cb, err := srv.Read()
+		path, msg, cb, err := srv.Read()
 		require.NoError(t, err)
 		assert.Equal(t, body, msg)
+		assert.Equal(t, "ping", path)
 		cb([]byte("ok"))
 	}()
 
@@ -74,7 +76,7 @@ func TestRPC_E2E_LongMessage(t *testing.T) {
 	cln := NewRPC(mc.Client)
 
 	// client writes to server
-	res, err := cln.Request(context.Background(), body)
+	res, err := cln.Request(context.Background(), "ping", body)
 	require.NoError(t, err)
 	require.Equal(t, "ok", string(res))
 }
