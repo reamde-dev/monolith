@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package example;
+
+option go_package = "reamde.dev/monolith/proto/example;example";
+
+message UpperRequest {
+  string value = 1;
+}
+
+message UpperResponse {
+  string value = 1;
+}
+
+// message LowerRequest {
+//   string value = 1;
+// }
+
+// message LowerResponse {
+//   string value = 1;
+// }
+
+service StringsService {
+  rpc Upper(UpperRequest) returns (UpperResponse);
+  // rpc Lower(LowerRequest) returns (LowerResponse);
+}
