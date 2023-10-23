@@ -10,6 +10,7 @@ import (
 
 type (
 	Request[T any] struct {
+		Target  PeerAddr
 		Paylaod *T
 	}
 	Response[T any] struct {
@@ -18,9 +19,22 @@ type (
 	}
 )
 
+func NewRequest[Req any](payload *Req) *Request[Req] {
+	return &Request[Req]{
+		Paylaod: payload,
+	}
+}
+
+func NewResponse[Res any](payload *Res) *Response[Res] {
+	return &Response[Res]{
+		Payload: payload,
+	}
+}
+
 type (
 	RPCRequest struct {
 		Path    string
+		Target  PeerAddr
 		Payload []byte
 	}
 	RPCResponse struct {
@@ -32,7 +46,6 @@ type (
 type HandlerFunc func(context.Context, *RPCRequest) (*RPCResponse, error)
 
 func NewHandler[Req, Res any](
-	path string,
 	handler func(context.Context, *Request[Req]) (*Response[Res], error),
 ) HandlerFunc {
 	return func(ctx context.Context, rpcReq *RPCRequest) (*RPCResponse, error) {
@@ -358,11 +371,17 @@ func (cm *SessionManager) handleSession(ses *RPC) {
 	}
 }
 
-func (cm *SessionManager) RegisterHandler(
-	path string,
-	handler HandlerFunc,
-) {
+func (cm *SessionManager) RegisterHandler(path string, handler HandlerFunc) error {
+	fmt.Println("registering handler for path:", path)
 	cm.handlers[path] = handler
+	return nil
+}
+
+func (cm *SessionManager) RegisterHandlers(handlers Handlers) error {
+	for path, handler := range handlers {
+		cm.RegisterHandler(path, handler)
+	}
+	return nil
 }
 
 func (cm *SessionManager) PeerAddr() *PeerAddr {
@@ -448,3 +467,33 @@ func (cm *SessionManager) Close() error {
 
 // 	return identityInfo, nil
 // }
+
+func MakeRequest[Req, Res any](
+	cm *SessionManager,
+	ctx context.Context,
+	path string,
+	req *Request[Req],
+) (*Response[Res], error) {
+	rpcPayload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal rpc payload: %w", err)
+	}
+
+	rpcReq := &RPCRequest{
+		Path:    path,
+		Target:  req.Target,
+		Payload: rpcPayload,
+	}
+	res, err := cm.Request(ctx, rpcReq, &req.Target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	var rpcRes Response[Res]
+	err = json.Unmarshal(res.Payload, &rpcRes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &rpcRes, nil
+}
