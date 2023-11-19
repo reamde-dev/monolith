@@ -13,6 +13,6 @@ plugins:
     opt: paths=source_relative
     out: proto
   - name: monolith-go
-    path: ./protoc-gen-monolith-go
+    path: ./bin/protoc-gen-monolith-go
     opt: paths=source_relative
     out: proto

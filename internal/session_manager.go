@@ -10,10 +10,11 @@ import (
 
 type (
 	Request[T any] struct {
-		Target  PeerAddr
+		Target  *PeerAddr
 		Paylaod *T
 	}
 	Response[T any] struct {
+		Source  PublicKey
 		Payload *T
 		Error   string
 	}
@@ -34,10 +35,11 @@ func NewResponse[Res any](payload *Res) *Response[Res] {
 type (
 	RPCRequest struct {
 		Path    string
-		Target  PeerAddr
+		Target  *PeerAddr
 		Payload []byte
 	}
 	RPCResponse struct {
+		Source  PublicKey
 		Payload []byte
 		Error   string
 	}
@@ -66,6 +68,7 @@ func NewHandler[Req, Res any](
 		}
 
 		return &RPCResponse{
+			Source:  res.Source,
 			Payload: resBytes,
 		}, nil
 	}
@@ -152,7 +155,6 @@ func (cm *SessionManager) dial(
 
 	// wrap the connection in a chunked connection
 	ses := NewSession(conn)
-	// ses := NewSession(conn, &addr) // TODO: check this
 	err = ses.DoServer(cm.publicKey, cm.privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("error performing handshake: %w", err)
@@ -278,6 +280,7 @@ func (cm *SessionManager) requestFromPeerAddr(
 	}
 
 	return &RPCResponse{
+		Source:  ses.session.remotePublicKey,
 		Payload: res,
 	}, nil
 }
@@ -298,7 +301,6 @@ func (cm *SessionManager) handleConnections() error {
 			// start a new session, and perform the server side of the handshake
 			// this will also perform the key exchange so after this we should
 			// know the public key of the remote peer
-			// ses := NewSession(conn, nil) // TODO: check this
 			ses := NewSession(conn)
 			err = ses.DoServer(cm.publicKey, cm.privateKey)
 			if err != nil {
@@ -484,7 +486,7 @@ func MakeRequest[Req, Res any](
 		Target:  req.Target,
 		Payload: rpcPayload,
 	}
-	res, err := cm.Request(ctx, rpcReq, &req.Target)
+	res, err := cm.Request(ctx, rpcReq, req.Target)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -494,6 +496,8 @@ func MakeRequest[Req, Res any](
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	rpcRes.Source = res.Source
 
 	return &rpcRes, nil
 }

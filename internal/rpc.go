@@ -13,6 +13,8 @@ import (
 )
 
 type RPC struct {
+	session *Session
+
 	writerQueue *xsync.Queue[*pendingWrite]
 	readerQueue *xsync.Queue[*pendingRead]
 
@@ -48,6 +50,7 @@ func NewRPC(
 	sess *Session,
 ) *RPC {
 	rpc := &RPC{
+		session:     sess,
 		writerQueue: xsync.NewQueue[*pendingWrite](10),
 		readerQueue: xsync.NewQueue[*pendingRead](10),
 		requests:    xsync.NewMap[uint64, *pendingRequest](),

@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package monolith;
+
+option go_package = "reamde.dev/monolith/proto;monolith";
+
+message Ed25519Key {
+    bytes key = 1; // The key, 32 bytes for Ed25519
+}
+
+message PrivateKey {
+    oneof key_type {
+        Ed25519Key ed25519 = 1;
+    }
+}
+
+message PublicKey {
+    oneof key_type {
+        Ed25519Key ed25519 = 1;
+    }
+}
+
+message KeyPair {
+    PrivateKey private_key = 1;
+    PublicKey public_key = 2;
+}
+
+message Signature {
+    enum Algorithm {
+        TYPE_UNSPECIFIED = 0;
+        TYPE_EDDSA = 1;
+    }
+    message Header {
+        Algorithm algorthm = 1;
+        Hash fingerprint = 2; // Public key fingerprint
+    } 
+    Header header = 1;
+    bytes signature = 2;
+}
+
+message Hash {
+    enum Algorithm {
+        TYPE_UNSPECIFIED = 0;
+        TYPE_OBJECTHASH_SHA256 = 1;
+    }
+    Algorithm algorithm = 1;
+    string Type = 2;
+    bytes hash = 3;
+}

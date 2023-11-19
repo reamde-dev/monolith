@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package example;
 
+import "monolith/types.proto";
+
 option go_package = "reamde.dev/monolith/proto/example;example";
 
 message PingRequest {
@@ -14,4 +16,13 @@ message PingResponse {
 
 service PingService {
   rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message TypeA {
+  string data = 1;
+}
+
+message TypeB {
+  string data = 1;
+  int32 number = 2;
 }

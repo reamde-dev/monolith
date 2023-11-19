@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package monolith;
+
+import "monolith/types.proto";
+
+option go_package = "reamde.dev/monolith/proto;monolith";
+
+message Account {
+  message Peer {
+    PeerInfo peer_info = 1;
+    repeated string topics = 2;
+  }
+  message Service {
+    string name = 1;
+    string description = 2;
+    repeated string methods = 3;
+  }
+  message Provider {
+    Keygraph identity = 1;
+    repeated Peer peers = 2;
+    repeated Service services = 3;
+  }
+  Keygraph identity = 1;
+  repeated Peer peers = 2;
+  repeated Provider providers = 3;
+}
+
+service AccountingService {
+  rpc RegisterPeer(RegisterPeerRequest) returns (RegisterPeerResponse);
+}
+
+message RegisterPeerRequest {
+  PeerInfo peer_info = 1;
+  repeated string topics = 2;
+}
+
+message RegisterPeerResponse {
+  Account.Peer peer = 1;
+}

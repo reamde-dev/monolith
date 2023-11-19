@@ -2,52 +2,31 @@ syntax = "proto3";
 
 package monolith;
 
+import "google/protobuf/any.proto";
+import "monolith/crypto.proto";
+
 option go_package = "reamde.dev/monolith/proto;monolith";
 
-enum KeyType {
-    KEYTYPE_UNSPECIFIED = 0;
-    KEYTYPE_OKP = 1; // Octet Key Pair
+message Message {
+    message Header {
+        uint32 version = 1;
+    }
+    Header header = 1;
+    google.protobuf.Any payload = 2;
+    repeated Signature signatures = 3;
 }
 
-enum KeyUse {
-    USE_UNSPECIFIED = 0;
-    USE_ENC = 1; // Encryption
-    USE_SIG = 2; // Signature
-}
-
-enum Algorithm {
-    ALG_UNSPECIFIED = 0;
-    ALG_EDDSA = 1; // EdDSA algorithm
-}
-
-enum Curve {
-    CRV_UNSPECIFIED = 0;
-    CRV_ED25519 = 1; // Ed25519 curve
-}
-
-message PublicKey {
-    KeyType kty = 1;   // Key Type; for Ed25519 this will likely be KEYTYPE_OKP
-    KeyUse use = 2;   // Use (either USE_ENC or USE_SIG)
-    string kid = 3;   // Key ID
-    Algorithm alg = 4;   // Algorithm intended for use; for Ed25519 this will be ALG_EDDSA
-    Curve crv = 5;   // Curve name; for Ed25519 this will always be CRV_ED25519
-
-    bytes x = 6;      // Public key for Ed25519
-}
-
-message PrivateKey {
-    KeyType kty = 1;   // Key Type; for Ed25519 this will likely be KEYTYPE_OKP
-    KeyUse use = 2;   // Use (either USE_ENC or USE_SIG)
-    string kid = 3;   // Key ID
-    Algorithm alg = 4;   // Algorithm intended for use; for Ed25519 this will be ALG_EDDSA
-    Curve crv = 5;   // Curve name; for Ed25519 this will always be CRV_ED25519
-
-    bytes d = 6;      // Private key for Ed25519
-}
-
-message Identity {
+message Keygraph {
+    message Rotation {
+        string id = 1;
+        PublicKey public_key = 2;
+        Hash next_public_key = 3;
+    }
     uint32 version = 1;
-    string hash = 2;
+    uint32 sequence = 2;
+    oneof event {
+        Rotation rotation = 3;
+    }
 }
 
 message Address {
@@ -62,18 +41,18 @@ message PeerInfo {
 }
 
 message BrokerInfo {
-    Identity id = 1;
+    Keygraph id = 1;
     repeated PeerInfo peers = 2;
 }
  
 message ProviderInfo {
-    Identity id = 1;
+    Keygraph id = 1;
     PeerInfo peer = 2;
     repeated string topics = 3;
 }
 
 message AccountInfo {
-    Identity id = 1;
+    Keygraph id = 1;
     PeerInfo peer = 2;
     repeated BrokerInfo brokers = 3;
     repeated ProviderInfo providers = 4;
